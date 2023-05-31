@@ -570,6 +570,11 @@ class PythonVisitor(ast.NodeVisitor):
         if node.value:
             value = self.visit(node.value)
 
+    def visit_Try(self, node: ast.Try):
+        # TODO: Check for exceptions
+        pass
+
+
     # PY3
     def visit_YieldFrom(self, node):
         if Generators not in self.features:
@@ -579,7 +584,8 @@ class PythonVisitor(ast.NodeVisitor):
             value = self.visit(node.value)
 
     def generic_visit(self, node):
-        assert 0
+        print("generic_visit", node)
+        assert False, f"Not expecting to visit this node type {node}"
 
 
 # ------------------------------------------------------------------------

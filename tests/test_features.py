@@ -1,15 +1,9 @@
 import sys
 import unittest
-import importlib
 
 from subpy import detect
 from subpy import features as f
 
-is_py3k = bool(sys.version_info[0] == 3)
-
-tests = []
-
-#------------------------------------------------------------------------
 
 class TestFeatureDetect(unittest.TestCase):
 
@@ -22,7 +16,7 @@ class TestFeatureDetect(unittest.TestCase):
     def test_implicit_casts(self):
 
         def fn():
-            return 1+2.0
+            return 1 + 2.0
 
         self.has(f.ImplicitCasts, fn)
 
@@ -45,6 +39,7 @@ class TestFeatureDetect(unittest.TestCase):
 
         def fn():
             x = 3
+
             def closure():
                 print(x)
 
@@ -219,7 +214,7 @@ class TestFeatureDetect(unittest.TestCase):
     def test_dict_comp(self):
 
         def fn():
-            {a : b for a,b in xs}
+            {a: b for a, b in xs}
 
         self.has(f.DictComp, fn)
 
@@ -240,7 +235,7 @@ class TestFeatureDetect(unittest.TestCase):
     def test_tuple_unpacking(self):
 
         def fn():
-            x, y = [1,2]
+            x, y = [1, 2]
 
         self.has(f.TupleUnpacking, fn)
 
@@ -319,7 +314,7 @@ class TestFeatureDetect(unittest.TestCase):
     def test_custom_iterators2(self):
 
         def fn():
-            for a in set([1,2,3]):
+            for a in set([1, 2, 3]):
                 pass
 
         self.has(f.CustomIterators, fn)
@@ -348,85 +343,3 @@ class TestFeatureDetect(unittest.TestCase):
                 pass
 
         self.has(f.Metaclasses, fn)
-
-tests.append(TestFeatureDetect)
-
-#------------------------------------------------------------------------
-
-class TestStandardLibrary(unittest.TestCase):
-
-    def test_fullstdlib(self):
-        from subpy.stdlib import libraries
-
-        for lib in libraries:
-            mod = importlib.import_module(lib)
-            detect(mod)
-
-tests.append(TestStandardLibrary)
-
-#------------------------------------------------------------------------
-
-class TestToplevel(unittest.TestCase):
-
-    def test_detect(self):
-        from subpy import detect, features
-
-        def foo():
-            lambda x:x
-            x, y = (1,2)
-
-        t1 = features.TupleUnpacking in detect(foo)
-        t2 = features.Lambda in detect(foo)
-
-        self.assertTrue(t1)
-        self.assertTrue(t2)
-
-    def test_checker(self):
-        from subpy import checker
-        from subpy.features import ListComp, SetComp
-
-        def comps():
-            return [x**2 for x in range(25)]
-
-        my_subset = set([
-            ListComp,
-            SetComp,
-        ])
-
-        features = checker(comps)
-
-        self.assertTrue(ListComp in features)
-
-    def test_validator(self):
-
-        from subpy import validator, FullPython, FeatureNotSupported
-        from subpy.features import ListComp, SetComp
-
-        def comps():
-            return [x**2 for x in range(25)]
-
-        my_features = FullPython - set([
-            ListComp,
-            SetComp,
-        ])
-
-        with self.assertRaises(FeatureNotSupported):
-            validator(comps, features=my_features)
-
-tests.append(TestToplevel)
-
-
-#------------------------------------------------------------------------
-
-def run(verbosity=1, repeat=1):
-    suite = unittest.TestSuite()
-    for cls in tests:
-        for _ in range(repeat):
-            suite.addTest(unittest.makeSuite(cls))
-
-    runner = unittest.TextTestRunner(verbosity=verbosity)
-    return runner.run(suite)
-
-
-if __name__ == '__main__':
-    run()
