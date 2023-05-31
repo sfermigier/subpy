@@ -2,10 +2,10 @@ import sys
 import unittest
 import importlib
 
-is_py3k = bool(sys.version_info[0] == 3)
-
 from subpy import detect
 from subpy import features as f
+
+is_py3k = bool(sys.version_info[0] == 3)
 
 tests = []
 
@@ -415,6 +415,7 @@ class TestToplevel(unittest.TestCase):
 
 tests.append(TestToplevel)
 
+
 #------------------------------------------------------------------------
 
 def run(verbosity=1, repeat=1):
@@ -425,6 +426,7 @@ def run(verbosity=1, repeat=1):
 
     runner = unittest.TextTestRunner(verbosity=verbosity)
     return runner.run(suite)
+
 
 if __name__ == '__main__':
     run()

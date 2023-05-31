@@ -7,7 +7,7 @@ from collections import deque, defaultdict
 
 from .features import *
 
-FullPython = set([
+FullPython = {
     ImplicitCasts,
     Generators,
     DelVar,
@@ -41,26 +41,27 @@ FullPython = set([
     SetComp,
     CustomIterators,
     Printing,
-    Metaclasses
-])
+    Metaclasses,
+}
+
 
 def _compile_lib_matcher(libs):
     matches = []
     for allowed in libs:
-        matches.append(allowed.replace('.', '\\.')\
-                              .replace('*', '.*$'))
-    return r'|'.join(matches)
+        matches.append(allowed.replace(".", "\\.").replace("*", ".*$"))
+    return r"|".join(matches)
 
-#------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------
 # AST Traversal
-#------------------------------------------------------------------------
+# ------------------------------------------------------------------------
 
 GLOBAL = 0
 
-class PythonVisitor(ast.NodeVisitor):
 
+class PythonVisitor(ast.NodeVisitor):
     def __init__(self, features, libs):
-        self.scope = deque([('global', 0)])
+        self.scope = deque([("global", 0)])
         self.features = features
 
         if libs:
@@ -85,8 +86,8 @@ class PythonVisitor(ast.NodeVisitor):
         self.visit(self._ast)
 
     def nolib(self, node, library):
-        #print 'NO SUPPORT! %s' % library
-        #print self._source.split('\n')[node.lineno-1]
+        # print 'NO SUPPORT! %s' % library
+        # print self._source.split('\n')[node.lineno-1]
         raise SystemExit()
 
     def action(self, node, feature):
@@ -94,24 +95,24 @@ class PythonVisitor(ast.NodeVisitor):
 
     # -------------------------------------------------
 
-    def visit_comprehension(self, node):
+    def visit_comprehension(self, node: ast.comprehension):
         if node.ifs:
             ifs = list(map(self.visit, node.ifs))
         target = self.visit(node.target)
         iter = self.visit(node.iter)
 
-    def visit_keyword(self, node):
+    def visit_keyword(self, node: ast.keyword):
         value = self.visit(node.value)
 
-    def check_arguments(self, node):
+    def check_arguments(self, node: ast.arguments):
         args = node.args
 
-        ### Check for variadic arguments
+        # Check for variadic arguments
         if VarArgs not in self.features:
             if args.vararg:
                 self.action(node, VarArgs)
 
-        ### Check for keyword arguments
+        # Check for keyword arguments
         if KeywordArgs not in self.features:
             if args.kwarg:
                 self.action(node, KeywordArgs)
@@ -120,17 +121,17 @@ class PythonVisitor(ast.NodeVisitor):
 
     # -------------------------------------------------
 
-    def visit_Assert(self, node):
-        ## Check for assertions
+    def visit_Assert(self, node: ast.Assert):
+        # Check for assertions
         if Assertions not in self.features:
             self.action(node, Assertions)
 
         test = self.visit(node.test)
 
-    def visit_Assign(self, node):
+    def visit_Assign(self, node: ast.Assign):
         targets = node.targets
 
-        ## Check for tuple unpacking
+        # Check for tuple unpacking
         if TupleUnpacking not in self.features:
             if len(node.targets) > 1:
                 self.action(node, TupleUnpacking)
@@ -142,25 +143,25 @@ class PythonVisitor(ast.NodeVisitor):
             self.visit(target)
             self.visit(node.value)
 
-            ## Check for metaclasses
+            # Check for metaclasses
             if Metaclasses not in self.features:
-                if isinstance(target, ast.Name) and target.id == '__metaclass__':
+                if isinstance(target, ast.Name) and target.id == "__metaclass__":
                     self.action(node, Metaclasses)
 
-    def visit_Attribute(self, node):
+    def visit_Attribute(self, node: ast.Attribute):
         value = self.visit(node.value)
 
-    def visit_AugAssign(self, node):
+    def visit_AugAssign(self, node: ast.AugAssign):
         target = self.visit(node.target)
         value = self.visit(node.value)
         op = node.op.__class__
 
-    def visit_BinOp(self, node):
+    def visit_BinOp(self, node: ast.BinOp):
         lhs = self.visit(node.left)
         rhs = self.visit(node.right)
         op_str = node.op.__class__
 
-        ## Check for implicit coercions between numeric types
+        # Check for implicit coercions between numeric types
         if ImplicitCasts not in self.features:
             if isinstance(node.left, ast.Num) and isinstance(node.right, ast.Num):
                 a = node.left.n
@@ -168,39 +169,40 @@ class PythonVisitor(ast.NodeVisitor):
                 if type(a) != type(b) and ImplicitCasts not in self.features:
                     self.action(node, ImplicitCasts)
 
-    def visit_Break(self, node):
+    def visit_Break(self, node: ast.Break):
         pass
 
-    def visit_BoolOp(self, node):
+    def visit_BoolOp(self, node: ast.BoolOp):
         operands = list(map(self.visit, node.values))
         operator = node.op.__class__
 
-        ## Check for implicit coercions between numeric types
+        # Check for implicit coercions between numeric types
         if ImplicitCasts not in self.features:
             for operand in node.values:
                 if isinstance(operand, ast.Num):
                     self.action(node, ImplicitCasts)
 
     # PY3
-    def visit_Bytes(self, node):
+    def visit_Bytes(self, node: ast.Bytes):
         pass
 
-    def visit_Call(self, node):
+    def visit_Call(self, node: ast.Call):
         name = self.visit(node.func)
         args = list(map(self.visit, node.args))
         keywords = list(map(self.visit, node.keywords))
 
         # Python 2.x - 3.4
-        if hasattr(node,"starargs") and node.starargs:
-            ## Check for variadic arguments
+        if hasattr(node, "starargs") and node.starargs:
+            # Check for variadic arguments
             starargs = self.visit(node.starargs)
 
             if VarArgs not in self.features:
                 self.action(node, VarArgs)
 
-        if (hasattr(node,'keywords') and node.keywords) or \
-            (hasattr(node,'kwargs') and node.kwargs):
-            ## Check for keyword arguments
+        if (hasattr(node, "keywords") and node.keywords) or (
+            hasattr(node, "kwargs") and node.kwargs
+        ):
+            # Check for keyword arguments
             kwargs = list(map(self.visit, node.keywords))
 
             if KeywordArgs not in self.features:
@@ -209,49 +211,46 @@ class PythonVisitor(ast.NodeVisitor):
         # Python 3.5+
         # TODO
 
-
-    def visit_ClassDef(self, node):
-
+    def visit_ClassDef(self, node: ast.ClassDef):
         if Classes not in self.features:
             self.action(node, Classes)
 
         if node.bases:
             bases = list(map(self.visit, node.bases))
 
-            ## Check for single inheritance
+            # Check for single inheritance
             if len(bases) >= 1 and Inheritance not in self.features:
                 self.action(node, Inheritance)
 
-            ## Check for multiple inheritance
+            # Check for multiple inheritance
             if len(bases) > 1 and MInheritance not in self.features:
                 self.action(node, MInheritance)
 
         if node.decorator_list:
             decorators = list(map(self.visit, node.decorator_list))
 
-            ## Check for class decorators
+            # Check for class decorators
             if decorators and ClassDecorators not in self.features:
                 self.action(node, ClassDecorators)
 
-
-        self.scope.append(('class', node))
+        self.scope.append(("class", node))
         body = list(map(self.visit, node.body))
         self.scope.pop()
 
-    def visit_Compare(self, node):
-        ## Check for chained comparisons
+    def visit_Compare(self, node: ast.Compare):
+        # Check for chained comparisons
         if len(node.comparators) > 1 and ChainComparison not in self.features:
             self.action(node, ChainComparison)
 
         operands = list(map(self.visit, [node.left] + node.comparators))
         operators = [op.__class__ for op in node.ops]
 
-    def visit_Continue(self, node):
-        ## Check for continue
+    def visit_Continue(self, node: ast.Continue):
+        # Check for continue
         if Continue not in self.features:
             self.action(node, Continue)
 
-    def visit_Delete(self, node):
+    def visit_Delete(self, node: ast.Delete):
         target = list(map(self.visit, node.targets))
         if DelVar not in self.features:
             self.action(node, DelVar)
@@ -260,34 +259,33 @@ class PythonVisitor(ast.NodeVisitor):
         keys = list(map(self.visit, node.keys))
         values = list(map(self.visit, node.values))
 
-    def visit_DictComp(self, node):
+    def visit_DictComp(self, node: ast.DictComp):
         key = self.visit(node.key)
         value = self.visit(node.value)
         gens = list(map(self.visit, node.generators))
 
-        ## Check for dictionary comprehensions
+        # Check for dictionary comprehensions
         if DictComp not in self.features:
             self.action(node, DictComp)
 
-    def visit_Ellipsis(self, node):
+    def visit_Ellipsis(self, node: ast.Ellipsis):
         pass
 
-    def visit_ExtSlice(self, node):
+    def visit_ExtSlice(self, node: ast.ExtSlice):
         list(map(self.visit, node.dims))
 
-    def visit_ExceptHandler(self, node):
-
+    def visit_ExceptHandler(self, node: ast.ExceptHandler):
         if node.name:
             name = node.name.id
-        #if node.type:
-            #type = node.type.id
+        # if node.type:
+        # type = node.type.id
         body = list(map(self.visit, node.body))
 
         if Exceptions not in self.features:
             self.action(node, Exceptions)
 
     def visit_Exec(self, node):
-        ## Check for dynamic exec
+        # Check for dynamic exec
         if Exec not in self.features:
             self.action(node, Exec)
 
@@ -297,72 +295,72 @@ class PythonVisitor(ast.NodeVisitor):
         if node.locals:
             locals = self.visit(node.locals)
 
-    def visit_Expr(self, node):
+    def visit_Expr(self, node: ast.Expr):
         value = self.visit(node.value)
 
-    def visit_For(self, node):
+    def visit_For(self, node: ast.For):
         target = self.visit(node.target)
         iter = self.visit(node.iter)
         body = list(map(self.visit, node.body))
         orelse = list(map(self.visit, node.orelse))
 
-        ## Check for custom iterators
+        # Check for custom iterators
         if CustomIterators not in self.features:
             if not isinstance(node.iter, ast.Call):
                 self.action(node, CustomIterators)
             elif isinstance(node.iter.func, ast.Name):
-                if node.iter.func.id not in ['xrange', 'range']:
+                if node.iter.func.id not in ["xrange", "range"]:
                     self.action(node, CustomIterators)
             else:
                 self.action(node, CustomIterators)
 
-        ## Check for tuple unpacking
+        # Check for tuple unpacking
         if TupleUnpacking not in self.features:
             if isinstance(node.target, ast.Tuple):
                 self.action(node.target, TupleUnpacking)
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef):
         self.check_arguments(node)
 
         if node.decorator_list:
             decorators = list(map(self.visit, node.decorator_list))
 
-            ## Check for class decorators
+            # Check for class decorators
             if decorators and Decorators not in self.features:
                 self.action(node, Decorators)
 
-        ## Check for closures
+        # Check for closures
         scope_ty, scope = self.scope[-1]
 
-        if scope_ty == 'function' and scope != GLOBAL:
+        if scope_ty == "function" and scope != GLOBAL:
             if Closures not in self.features:
                 self.action(node, Closures)
 
-        self.scope.append(('function', node))
+        self.scope.append(("function", node))
 
         for defn in node.body:
             self.visit(defn)
         self.scope.pop()
 
-    def visit_Global(self, node):
-        ## Check for globals
+    def visit_Global(self, node: ast.Global):
+        # Check for globals
         if Globals not in self.features:
             self.action(node, Globals)
 
-    def visit_GeneratorExp(self, node):
+    def visit_GeneratorExp(self, node: ast.GeneratorExp):
         self.visit(node.elt)
         list(map(self.visit, node.generators))
 
-        ## Check for dictionary comprehensions
+        # Check for dictionary comprehensions
         if GeneratorExp not in self.features:
             self.action(node, GeneratorExp)
 
-    def visit_If(self, node):
+    def visit_If(self, node: ast.If):
         test = self.visit(node.test)
         body = list(map(self.visit, node.body))
         orelse = list(map(self.visit, node.orelse))
 
-    def visit_IfExp(self, node):
+    def visit_IfExp(self, node: ast.IfExp):
         test = self.visit(node.test)
         body = self.visit(node.body)
         orelse = self.visit(node.orelse)
@@ -370,12 +368,12 @@ class PythonVisitor(ast.NodeVisitor):
         if Ternary not in self.features:
             self.action(node, Ternary)
 
-    def visit_Import(self, node):
+    def visit_Import(self, node: ast.Import):
         matcher = self.libs
 
-        ## Check for unsupported libraries
+        # Check for unsupported libraries
         def check_import(name):
-            if name.startswith('.') and RelativeImports not in self.features:
+            if name.startswith(".") and RelativeImports not in self.features:
                 self.action(node, RelativeImports)
 
             if not re.match(matcher, name):
@@ -385,18 +383,17 @@ class PythonVisitor(ast.NodeVisitor):
             if self.libs:
                 check_import(package.name)
 
-    def visit_ImportFrom(self, node):
+    def visit_ImportFrom(self, node: ast.ImportFrom):
         matcher = self.libs
 
-        ## Check for unsupported libraries
+        # Check for unsupported libraries
         def check_import(name):
-
             if not re.match(matcher, name):
                 self.nolib(node, name)
 
         for package in node.names:
-            ## Check for "import *"
-            if package.name == '*' and ImportStar not in self.features:
+            # Check for "import *"
+            if package.name == "*" and ImportStar not in self.features:
                 self.action(node, ImportStar)
 
             if node.module == None:
@@ -404,26 +401,26 @@ class PythonVisitor(ast.NodeVisitor):
                     self.action(node, RelativeImports)
 
             if node.module and self.libs:
-                munged = node.module + '.' + package.name
+                munged = node.module + "." + package.name
                 check_import(munged)
 
     def visit_Index(self, node):
         self.visit(node.value)
 
     def visit_Lambda(self, node):
-        ## Check for lambdas
+        # Check for lambdas
         if Lambda not in self.features:
             self.action(node, Lambda)
 
         self.check_arguments(node)
 
-        #args = self.visit(node.args)
+        # args = self.visit(node.args)
         body = self.visit(node.body)
 
     def visit_List(self, node):
         elts = list(map(self.visit, node.elts))
 
-        ## Check for hetereogenous lists
+        # Check for hetereogenous lists
         if node.elts and not HeteroList in self.features:
             ty = type(node.elts[0])
             for el in node.elts[1:]:
@@ -434,7 +431,7 @@ class PythonVisitor(ast.NodeVisitor):
         elt = self.visit(node.elt)
         gens = list(map(self.visit, node.generators))
 
-        ## Check for list comprehensions
+        # Check for list comprehensions
         if ListComp not in self.features:
             self.action(node, ListComp)
 
@@ -451,7 +448,7 @@ class PythonVisitor(ast.NodeVisitor):
         pass
 
     def visit_Print(self, node):
-        ## Check for printing
+        # Check for printing
         if Printing not in self.features:
             self.action(node, Printing)
 
@@ -464,7 +461,7 @@ class PythonVisitor(ast.NodeVisitor):
         if node.type:
             self.visit(node.type)
 
-        ## Check for exceptions
+        # Check for exceptions
         if Exceptions not in self.features:
             self.action(node, Exceptions)
 
@@ -472,7 +469,7 @@ class PythonVisitor(ast.NodeVisitor):
         if node.value:
             self.visit(node.value)
 
-        ## Check for multiple returns
+        # Check for multiple returns
         if isinstance(node.value, ast.Tuple) and MultipleReturn not in self.features:
             self.action(node, MultipleReturn)
 
@@ -483,7 +480,7 @@ class PythonVisitor(ast.NodeVisitor):
         elt = self.visit(node.elt)
         gens = list(map(self.visit, node.generators))
 
-        ## Check for set comprehensions
+        # Check for set comprehensions
         if SetComp not in self.features:
             self.action(node, SetComp)
 
@@ -510,11 +507,11 @@ class PythonVisitor(ast.NodeVisitor):
         value = self.visit(node.value)
         slice = self.visit(node.slice)
 
-        ## Check for fancy indexing
+        # Check for fancy indexing
         if isinstance(node.slice, ast.ExtSlice) and FancyIndexing not in self.features:
             self.action(node, FancyIndexing)
 
-            ## Check for ellipsis
+            # Check for ellipsis
             if Ellipsi not in self.features:
                 if any(type(a) == ast.Ellipsis for a in node.slice.dims):
                     self.action(node, Ellipsi)
@@ -530,7 +527,7 @@ class PythonVisitor(ast.NodeVisitor):
         if node.orelse:
             orelse = list(map(self.visit, node.orelse))
 
-        ## Check for exceptions
+        # Check for exceptions
         if Exceptions not in self.features:
             self.action(node, Exceptions)
 
@@ -538,7 +535,7 @@ class PythonVisitor(ast.NodeVisitor):
         body = list(map(self.visit, node.body))
         finalbody = list(map(self.visit, node.finalbody))
 
-        ## Check for exceptions
+        # Check for exceptions
         if Exceptions not in self.features:
             self.action(node, Exceptions)
 
@@ -556,7 +553,7 @@ class PythonVisitor(ast.NodeVisitor):
             orelse = list(map(self.visit, node.orelse))
 
     def visit_With(self, node):
-        ## Check for context managers
+        # Check for context managers
         if ContextManagers not in self.features:
             self.action(node, ContextManagers)
 
@@ -566,7 +563,7 @@ class PythonVisitor(ast.NodeVisitor):
         body = list(map(self.visit, node.body))
 
     def visit_Yield(self, node):
-        ## Check for generators
+        # Check for generators
         if Generators not in self.features:
             self.action(node, Generators)
 
@@ -584,25 +581,30 @@ class PythonVisitor(ast.NodeVisitor):
     def generic_visit(self, node):
         assert 0
 
-#------------------------------------------------------------------------
-# Validator
-#------------------------------------------------------------------------
 
-class FeatureNotSupported(SyntaxError): pass
+# ------------------------------------------------------------------------
+# Validator
+# ------------------------------------------------------------------------
+
+
+class FeatureNotSupported(SyntaxError):
+    pass
+
 
 class Validator(PythonVisitor):
-    """ Check if the given source conforms to the feature set or
-    raise an Exception. """
+    """Check if the given source conforms to the feature set or
+    raise an Exception."""
 
     def action(self, node, feature):
-        line = self._source.splitlines()[node.lineno-1]
+        line = self._source.splitlines()[node.lineno - 1]
         lineno = node.lineno
         offset = node.col_offset
-        raise FeatureNotSupported(feature, ('<stdin>', lineno, offset + 1, line))
+        raise FeatureNotSupported(feature, ("<stdin>", lineno, offset + 1, line))
+
 
 class Checker(PythonVisitor):
-    """ Aggregate sites for features that don't conform to the
-    given feature set """
+    """Aggregate sites for features that don't conform to the
+    given feature set"""
 
     def __init__(self, features, libraries):
         super(Checker, self).__init__(features, libraries)
@@ -616,8 +618,9 @@ class Checker(PythonVisitor):
         super(Checker, self).__call__(source)
         return dict(self.detected)
 
+
 class Detect(PythonVisitor):
-    """ Aggregate sites for conform to the given feature set """
+    """Aggregate sites for conform to the given feature set"""
 
     def __init__(self):
         super(Detect, self).__init__(set(), [])
@@ -631,16 +634,20 @@ class Detect(PythonVisitor):
         super(Detect, self).__call__(source)
         return dict(self.detected)
 
+
 def detect(source):
     d = Detect()
     return d(source)
+
 
 def checker(source, features=None, libraries=None):
     d = Checker(features or set(), libraries or list())
     return d(source)
 
+
 def validator(source, features=None, libraries=None):
     d = Validator(features or set(), libraries or list())
     return d(source)
+
 
 fd = detect
